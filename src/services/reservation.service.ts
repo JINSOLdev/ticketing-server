@@ -1,14 +1,18 @@
 import db from "../config/db";
 
 export const reservationService = {
-  async createReservation(userId: number, eventId: number, seatIds: number[]) {
+  async createReservation(
+    user_id: number,
+    event_id: number,
+    seatIds: number[]
+  ) {
     // 좌석이 1A 이런식이면 string으로 받아야 하는거 아닐까?
     return await db.$transaction(async (tx) => {
       // 1. 좌석 상태 확인
       const seats = await tx.seats.findMany({
         where: {
           id: { in: seatIds },
-          eventId,
+          event_id,
           status: "available",
         },
       });
@@ -20,13 +24,22 @@ export const reservationService = {
       // 2. 예매 생성
       const reservation = await tx.reservations.create({
         data: {
-          userId,
-          eventId,
-          seat: {
-            connect: seatIds.map((id) => ({ id: Number(id) })),
-          },
+          user_id,
+          event_id,
         },
       });
+
+      // 2. 중간 테이블에 좌석 연결
+      await Promise.all(
+        seatIds.map((seat_id) =>
+          tx.reservation_seats.create({
+            data: {
+              reservation_id: reservation.id,
+              seat_id,
+            },
+          })
+        )
+      );
 
       // 3. 좌석 상태 변경
       await tx.seats.updateMany({
@@ -41,10 +54,33 @@ export const reservationService = {
       const updatedReservation = await tx.reservations.findUnique({
         where: { id: reservation.id },
         include: {
-          seat: true,
+          reservation_seats: true,
         },
       });
       return updatedReservation;
     });
   },
+};
+
+export const getAvailableSeatsService = async (event_id: number) => {
+  const event = await db.events.findUnique({
+    where: { id: event_id },
+    include: {
+      seats: {
+        where: { status: "available" },
+        orderBy: {
+          seat_number: "asc",
+        },
+        select: {
+          id: true,
+          seat_number: true,
+        },
+      },
+    },
+  });
+
+  if (!event) {
+    throw new Error("해당 이벤트 찾을 수 없음");
+  }
+  return event.seats;
 };

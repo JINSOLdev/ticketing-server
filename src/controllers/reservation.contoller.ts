@@ -1,5 +1,8 @@
-import { Request, Response } from "express";
-import { reservationService } from "../services/reservation.service";
+import { Request, Response, NextFunction } from "express";
+import {
+  reservationService,
+  getAvailableSeatsService,
+} from "../services/reservation.service";
 
 export const createReservation = async (req: Request, res: Response) => {
   const { userId, eventId, seatIds } = req.body;
@@ -16,6 +19,25 @@ export const createReservation = async (req: Request, res: Response) => {
     );
     res.status(201).json({ message: "예매 완료", reservation });
   } catch (error: any) {
-    res.status(400).json({ message: error.message });404
+    res.status(400).json({ message: error.message });
+    404;
+  }
+};
+
+export const getAvailableSeats = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const eventId = parseInt(req.params.eventId);
+    const seats = await getAvailableSeatsService(eventId);
+
+    res.status(200).json({
+      eventId,
+      availableSeats: seats,
+    });
+  } catch (error) {
+    next(error);
   }
 };
